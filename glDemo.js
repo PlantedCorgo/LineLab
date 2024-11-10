@@ -30,13 +30,13 @@ function createShaderObject(gl, shaderSource, shaderType) {
 
 function createShaderProgram(gl, vertexSource, fragmentSource) {
     // Create shader objects for vertex and fragment shader
-    var   vertexShader = createShaderObject(gl,   vertexSource, gl.  VERTEX_SHADER);
+    var vertexShader = createShaderObject(gl, vertexSource, gl.VERTEX_SHADER);
     var fragmentShader = createShaderObject(gl, fragmentSource, gl.FRAGMENT_SHADER);
 
     // Create a shader program
     var program = gl.createProgram();
     // Attach the vertex and fragment shader to the program
-    gl.attachShader(program,   vertexShader);
+    gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     // Link the shaders together into a program
     gl.linkProgram(program);
@@ -71,34 +71,39 @@ function createIndexBuffer(gl, indexData) {
 /////////////////////////////////
 var VertShaderSource = `
     // TODO 2.2: Declare the uniform variable Matrix as a mat4 here:
-
+    uniform mat4 Matrix;
+    
     attribute vec3 Position;
     // TODO 3.3: Declare the Color attribute.
+    attribute vec3 Color;
 
     // TODO 3.4: Declare a varying called vColor
+    varying vec3 vColor;
 
     void main() {
 
         // TODO 2.3: Change the following line so the gl_Position
         // gets the product of Matrix and the Position attribute
-        gl_Position = vec4(Position, 1.0);
+        gl_Position = Matrix * vec4(Position, 1.0);
 
         // TODO 3.5: Store the color attribute's value in the color varying
-
+        vColor = Color;
     }
 `;
 var FragShaderSource = `
     precision highp float; // use highest available precision for floats
 
     // TODO 3.6: Declare the varying for color
+    varying vec3 vColor;
 
     void main() {
 
         // TODO 1: Set gl_FragColor to black instead of white
-        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 
         // TODO 3.7: Set gl_FragColor to the interpolated value passed
         // in from the rasterizer.
+        gl_FragColor = vec4(vColor, 1.0);
 
     }
 `;
@@ -107,13 +112,13 @@ var FragShaderSource = `
 ////////////////////////
 //// TRIANGLE CODE ////
 ////////////////////////
-var Triangle = function(gl, vertexPositions, vertexColors, indices, vertexSource, fragmentSource) {
+var Triangle = function (gl, vertexPositions, vertexColors, indices, vertexSource, fragmentSource) {
     // Create OpenGL buffers for the vertex and index data of the triangle
     this.positionVbo = createVertexBuffer(gl, vertexPositions);
     this.indexIbo = createIndexBuffer(gl, indices);
 
     // TODO 3.1 - create a vertex buffer for the color data contained in vertexColors
-
+    this.colorVbo = createVertexBuffer(gl, vertexColors);
     // Create the shader program that will render the triangle
     this.shaderProgram = createShaderProgram(gl, vertexSource, fragmentSource);
 
@@ -121,7 +126,7 @@ var Triangle = function(gl, vertexPositions, vertexColors, indices, vertexSource
     this.indexCount = indices.length;
 }
 
-Triangle.prototype.render = function(gl, matrix) {
+Triangle.prototype.render = function (gl, matrix) {
 
     // Bind shader program
     gl.useProgram(this.shaderProgram);
@@ -129,8 +134,8 @@ Triangle.prototype.render = function(gl, matrix) {
     // TODO 2.1 - uncomment these two lines of code to pass the matrix to the
     // shader as a uniform. The matrix is transposed to convert from row-major
     // to column-major.
-    //var Matrix_loc = gl.getUniformLocation(this.shaderProgram, "Matrix");
-    //gl.uniformMatrix4fv(Matrix_loc, false, matrix.transpose().m);
+    var Matrix_loc = gl.getUniformLocation(this.shaderProgram, "Matrix");
+    gl.uniformMatrix4fv(Matrix_loc, false, matrix.transpose().m);
 
     // Bind the vertex and index buffers with our triangle positions
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionVbo);
@@ -144,7 +149,12 @@ Triangle.prototype.render = function(gl, matrix) {
     }
 
     // TODO 3.2: Bind the color VBO and link it to the Color attribute
-
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.colorVbo);
+    var colorAttrib = gl.getAttribLocation(this.shaderProgram, "Color"); // Get color attribute
+    if (colorAttrib >= 0) {
+        gl.enableVertexAttribArray(colorAttrib);
+        gl.vertexAttribPointer(colorAttrib, 3, gl.FLOAT, false, 0, 0);
+    }
     // Draw the triangle!
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);
 }
@@ -152,12 +162,11 @@ Triangle.prototype.render = function(gl, matrix) {
 /////////////////////////////
 //// GLDEMO - main code  ////
 /////////////////////////////
-var glDemo = function(canvas, gl)
-{
+var glDemo = function (canvas, gl) {
     // vertex data for a single triangle
     var vertices = [
-        0.2,  0.5, 0.0,
-       -0.5, -0.5, 0.0,
+        0.2, 0.5, 0.0,
+        -0.5, -0.5, 0.0,
         0.8, -0.4, 0.0
     ];
 
@@ -169,15 +178,14 @@ var glDemo = function(canvas, gl)
     ];
 
     // index data for a single triangle
-    var indices = [0,1,2];
+    var indices = [0, 1, 2];
 
     this.tri = new Triangle(gl, vertices, colors, indices, VertShaderSource, FragShaderSource);
 
     gl.enable(gl.DEPTH_TEST); // turn on z buffering
 }
 
-glDemo.prototype.render = function(canvas, gl, w, h)
-{
+glDemo.prototype.render = function (canvas, gl, w, h) {
     // set the background color to white
     gl.clearColor(1.0, 1.0, 1.0, 1.0);
 
@@ -189,10 +197,16 @@ glDemo.prototype.render = function(canvas, gl, w, h)
 
     // TODO 2.4: Adjust the translation component to make the triangle
     // fit back inside the canvas.
-    matrix.m = [1.5, 0.0, 0.0, 0.0,
-                0.0, 1.5, 0.0, 0.0,
-                0.0, 0.0, 1.5, 0.0,
-                0.0, 0.0, 0.0, 1.0];
+    matrix.m = [1.0, 0.0, 0.0, -0.25, // Move triangle to the left by 0.25 to compensate for animation effects
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0];
+
+    // TODO 4.0: Animate the triangle.
+    var angle = Date.now() * 0.0015;
+    var cos = Math.cos(angle);
+    var sin = Math.sin(angle);
+    matrix.m[12] = (cos * sin);
 
     this.tri.render(gl, matrix);
 }
